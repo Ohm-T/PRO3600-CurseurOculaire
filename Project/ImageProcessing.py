@@ -1,60 +1,90 @@
 import cv2
 import numpy as np
 
+"""
+ImageProcessing regroupe l'ensemble des fonctions de traitement 
+de l'image dans la récupération de l'oeil et de sa position
+"""
 
-# Renvoie le vecteur déplacement de la pupille entre 2 images
+
 def getPupilVector(lastPos, currentPos):
+    """ Renvoie le vecteur déplacement de la pupille entre 2 images
+
+    :param lastPos: dernière position de la pupille
+    :param currentPos: position actuelle de la pupille
+    :return: None
+    """
     return [lastPos[0] - currentPos[0], lastPos[1] - currentPos[1]]
 
 
-# Renvoie la position de la pupille par rapport à la glande lacrimale
-def getPupilPosition(image):
+def getPupilPosition(image, thresholdValue=30):
+    """ Renvoie la position de la pupille dans le cadre de détection
+
+    :param image: image issue de la caméra
+    :param thresholdValue: valeur de seuil de détection de la pupille
+    :return: x, y - Position de la pupille | 0,0 si cas d'erreur
+    """
+    # Récupération de l'image de l'oeil seuillée adaptée
+    threshold = getThresholdedEye(image, thresholdValue)
+
+    # attente d'une erreur de format CV2 due à une non détection de l'oeil (mauvais seuillage généralement)
+    try:
+        # Recherche des contours de l'oeil
+        contours = cv2.findContours(np.array(threshold), cv2.RETR_TREE, cv2.CHAIN_APPROX_SIMPLE)
+
+        # Conditions de détection de l'oeil
+        if contours is None:
+            print("No eye contour detected")
+            return [0, 0]
+        if len(contours) == 0:
+            print("No eye contour detected")
+            return [0, 0]
+
+        # Récupération des coordonnées de la pupille
+        (x, y, w, h) = cv2.boundingRect(contours[0])
+
+        return x + int(w / 2), y + int(h / 2)
+
+    except cv2.error:
+        # Retourne le cas d'erreur
+        return 0, 0
+
+
+def getThresholdedEye(image, thresholdValue):
+    """ Permet de seuiller en noir/blanc l'imagette de l'oeil extraite d'une image caméra sur un critère de luminosité
+
+    :param image: image issue de la caméra
+    :param thresholdValue: valeur de seuil de détection de la pupille
+    :return: threshold - Image de l'oeil sur laquelle est appliquée le seuil | [0, 0] cas d'erreur
+    """
     # Extraction de l'imagette de l'oeil supérieur droit détecté
-    eye_color = extractEyesPicture(image)
+    image = extractEyesPicture(image)
     # Condition de détection
-    if eye_color is None:
+    if image is None:
         print("Eye_color is None")
         return [0, 0]
 
     # Passage en noir et blanc pour la réduction d'information et une meilleure détection
-    gray = cv2.cvtColor(eye_color, cv2.COLOR_BGR2GRAY)
-
-    ## Détection de cercle dans l'imagette de l'oeil par la méthode de Hough
-    #circles = cv2.HoughCircles(gray, cv2.HOUGH_GRADIENT, 1.2, 100)
-
-    # Condition de détection d'un cercle
-    #if circles is None:
-    #    print("No hough circles detected")
-    #    showImage(gray, "error")
-    #    return [0, 0]
+    gray = cv2.cvtColor(image, cv2.COLOR_BGR2GRAY)
 
     # Récupération de la taille de l'image
     rows, cols = gray.shape
     # Application d'un flou gaussien
     gray_blurred = cv2.GaussianBlur(gray, (7, 7), 0)
     # Seuillage
-    _, threshold = cv2.threshold(gray_blurred, 80, 255, cv2.THRESH_BINARY_INV)
-    # Recherche des contours de l'oeil
-    contours = cv2.findContours(threshold, cv2.RETR_TREE, cv2.CHAIN_APPROX_SIMPLE)
+    _, threshold = cv2.threshold(gray_blurred, thresholdValue, 255, cv2.THRESH_BINARY_INV)
 
-    # Conditions de détection de l'oeil
-    if contours is None:
-        print("No eye contour detected")
-        return [0, 0]
-    if len(contours) == 0:
-        print("No eye contour detected")
-        return [0, 0]
-
-    # Récupération des coordonnées de la pupille
-    (x, y, w, h) = cv2.boundingRect(contours[0])
-
-    return [x + int(w / 2), y + int(h / 2)]
+    return threshold
 
 
-# Extrait une imagette de l'oeil supérieur droit
 def extractEyesPicture(image):
+    """ Extrait une imagette de l'oeil supérieur droit
+
+    :param image: image type openCV2 issue de la caméra
+    :return: extracted - Imagette de l'oeil supérieur droit extrait
+    """
     # Méthode des ondelettes de Haar pour la détection des yeux
-    eye_cascade = cv2.CascadeClassifier(cv2.data.haarcascades + 'haarcascade_eye.xml')
+    eye_cascade = cv2.CascadeClassifier('haarcascade_eye.xml')
 
     # Définiton de l'image du visage en couleur
     roi_color, w, h = extractFacesPicture(image);
@@ -78,10 +108,14 @@ def extractEyesPicture(image):
     return extracted
 
 
-# Extrait une image englobant le visage de l'utilisateur
 def extractFacesPicture(image):
+    """ Extrait une image englobant le visage de l'utilisateur
+
+    :param image: image type openCV2 issue de la caméra
+    :return: extracted - Image englobant le visage de l'utilisateur
+    """
     # Méthode des ondelettes de Haar pour la détection de visage
-    face_cascade = cv2.CascadeClassifier(cv2.data.haarcascades + 'haarcascade_frontalface_default.xml')
+    face_cascade = cv2.CascadeClassifier('haarcascade_frontalface_default.xml')
     # Passage en noir et blanc pour la réduction d'information et une meilleure détection
     gray = cv2.cvtColor(image, cv2.COLOR_BGR2GRAY)
     # Détection des visages
@@ -100,13 +134,12 @@ def extractFacesPicture(image):
     return extracted, w, h
 
 
-# Renvoie une image cv2 de la caméra
-def getCameraView(cameraSlot=0):
-    cap = cv2.VideoCapture(cameraSlot, cv2.CAP_DSHOW)
-    _, frame = cap.read()
-    return frame
-
-
-# Permet d'afficher à l'écran une image (utile pour le debug)
 def showImage(image, imageName="noName"):
-    cv2.imshow(imageName, image)
+    """ Permet d'afficher à l'écran une image openCV2
+
+    :param image: image à afficher
+    :param imageName: nom de la fenêtre d'affichage
+    :return: None
+    """
+    cv2.imshow(imageName, np.array(image))
+    cv2.moveWindow(imageName, 900, 420);

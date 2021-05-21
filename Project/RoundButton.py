@@ -1,13 +1,30 @@
 import tkinter as tk
 
+"""
+Class définissant des boutons ronds | Récupération retravaillée de la source :
+https://stackoverflow.com/questions/42579927/rounded-button-tkinter-python/45536589
+"""
 
-# Class définissant des boutons ronds
-# Récupération de la source : https://stackoverflow.com/questions/42579927/rounded-button-tkinter-python/45536589
+
 class RoundButton(tk.Canvas):
-    def __init__(self, parent, width, height, cornerradius, padding, color, bg, command=None):
+
+    def __init__(self, parent, width, height, cornerradius, padding, color, bg, scaler):
+        """ Constructeur de RoundButton
+
+        :param parent: canvas parent tkinter
+        :param width: largeur du bouton
+        :param height: hauteur du bouton
+        :param cornerradius: rayon du cercle
+        :param padding: remplissage
+        :param color: couleur
+        :param bg: fond
+        :param scaler: instance d'un objet CursorScaling
+        """
         tk.Canvas.__init__(self, parent, borderwidth=0,
                            relief="flat", highlightthickness=0, bg=bg)
-        self.command = command
+
+        # Le bouton doit pouvoir disparaître dans le scaler, on a donc besoin de l'instance
+        self.scaler = scaler
 
         if cornerradius > 0.5 * width:
             print("Error: cornerradius is greater than width.")
@@ -43,8 +60,19 @@ class RoundButton(tk.Canvas):
         self.bind("<ButtonRelease-1>", self._on_release)
 
     def _on_press(self, event):
+        """ Action effectuée quand évènement de clic sur le bouton
+
+        :param event: Evenement de clic
+        :return: None
+        """
         self.configure(relief="sunken")
+        if self.scaler is not None:
+            self.scaler.pointClickEvent(self)
 
     def _on_release(self, event):
-        self.configure(relief="raised")
+        """ Action effectuée quand relachement du bouton
 
+        :param event: Evenement de relachement
+        :return: None
+        """
+        self.configure(relief="raised")
